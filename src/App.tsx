@@ -31,24 +31,29 @@ export default function App() {
   }, []);
 
   const handleRestoreUI = () => {
-    const win = window as unknown as { wizardChess?: { toggleUI?: (force?: boolean) => void } };
-    if (win.wizardChess?.toggleUI) {
+    const win = window as unknown as {
+      wizardChess?: { toggleUI?: (force?: boolean) => void };
+      kaldirisChess?: { toggleUI?: (force?: boolean) => void };
+    };
+    if (win.kaldirisChess?.toggleUI) {
+      win.kaldirisChess.toggleUI(false);
+    } else if (win.wizardChess?.toggleUI) {
       win.wizardChess.toggleUI(false);
     } else {
       document.body.classList.remove('cinematic-ui-hidden');
       const btnHide = document.getElementById('btn-hide-ui');
-      if (btnHide) btnHide.textContent = 'Hide UI [H]';
+      if (btnHide) btnHide.textContent = 'Ocultar UI [H]';
     }
   };
 
   return (
     <>
       <div id="loading-overlay">
-        <div className="loader-title">Wizard Chess</div>
+        <div className="loader-title">Kaldiris Chess</div>
         <div className="loader-bar-wrap">
           <div className="loader-bar" id="loader-bar"></div>
         </div>
-        <div id="loader-text">Summoning Sanctum Architecture &amp; Sculpted Pieces...</div>
+        <div id="loader-text">Conjurando a Arquitetura do Santuário e as Peças Esculpidas...</div>
       </div>
 
       <div id="canvas-container"></div>
@@ -58,20 +63,20 @@ export default function App() {
         className="hud-btn mobile-only-restore-ui"
         id="btn-mobile-show-ui"
         onClick={handleRestoreUI}
-        title="Show HUD Controls"
+        title="Exibir Controles do HUD"
       >
-        Show UI
+        Exibir UI
       </button>
 
       <div id="hud-top">
         <div className="hud-group" id="hud-left">
           <div className="brand-pill">
-            <span className="brand-title">Wizard Chess</span>
+            <span className="brand-title">Kaldiris Chess</span>
           </div>
           <div className="status-pill" id="status-pill">
             <span className="turn-dot" id="turn-dot"></span>
-            <span id="turn-text">White to Move</span>
-            <span className="mode-badge" id="mode-badge">Playing as White</span>
+            <span id="turn-text">Vez das Brancas</span>
+            <span className="mode-badge" id="mode-badge">Jogando de Brancas</span>
           </div>
         </div>
 
@@ -83,7 +88,7 @@ export default function App() {
           aria-controls="hud-right"
           onClick={() => setMobileSheetOpen((prev) => !prev)}
         >
-          {mobileSheetOpen ? 'Close' : 'Controls'}
+          {mobileSheetOpen ? 'Fechar' : 'Controles'}
         </button>
 
         <div
@@ -111,7 +116,7 @@ export default function App() {
           </div>
 
           <div className="mobile-sheet-header">
-            <span className="mobile-sheet-title">Controls</span>
+            <span className="mobile-sheet-title">Controles</span>
             <button
               type="button"
               className="mobile-sheet-close"
@@ -120,117 +125,187 @@ export default function App() {
                 e.stopPropagation();
                 setMobileSheetOpen(false);
               }}
-              aria-label="Close Controls"
+              aria-label="Fechar Controles"
             >
-              Close ✕
+              Fechar ✕
             </button>
           </div>
 
-          <div className="mobile-sheet-section-label">Game Actions</div>
+          <div className="mobile-sheet-section-label">Ações da Partida</div>
 
           <button
             className="hud-btn"
             id="btn-side-toggle"
-            title="Switch between Playing as White and Playing as Black"
+            title="Alternar entre jogar de Brancas e jogar de Negras"
             onClick={() => setMobileSheetOpen(false)}
           >
-            Play as Black
+            Jogar de Negras
           </button>
           <button
             className="hud-btn"
             id="btn-ai-move"
-            title="Let the AI make the next move immediately"
+            title="Fazer a IA realizar o próximo movimento imediatamente"
             onClick={() => setMobileSheetOpen(false)}
           >
-            AI Move
+            Jogada da IA
           </button>
           <button
             className="hud-btn"
             id="btn-reset"
-            title="Start a fresh game on the altar"
+            title="Iniciar uma nova partida no altar"
             onClick={() => setMobileSheetOpen(false)}
           >
-            New Game
+            Nova Partida
           </button>
 
           <div className="hud-divider" aria-hidden="true"></div>
           <div className="mobile-sheet-section-label">
-            <span>Camera Views</span>
-            <span className="mobile-sheet-section-sub">Tap active view to flip</span>
+            <span>Visões de Câmera</span>
+            <span className="mobile-sheet-section-sub">Toque na visão ativa para inverter</span>
           </div>
 
           <button
             className="hud-btn active"
             id="btn-cam-player"
-            title="Player Camera (Click again to flip White / Black view)"
+            title="Câmera do Jogador (Clique novamente para inverter visão Brancas / Negras)"
           >
-            Player Cam
+            Câmera Jogador
           </button>
           <button
             className="hud-btn"
             id="btn-cam-top"
-            title="Overhead Board View (Click again to flip White / Black orientation)"
+            title="Visão Superior do Tabuleiro (Clique novamente para inverter orientação)"
           >
-            Overhead
+            Visão Superior
           </button>
           <button
             className="hud-btn"
             id="btn-cam-side"
-            title="Side Profile View (Click again to switch East / West side)"
+            title="Visão de Perfil Lateral (Clique novamente para alternar lado Leste / Oeste)"
           >
-            Side
+            Lateral
           </button>
           <button
             className="hud-btn"
             id="btn-cam-wide"
-            title="Wide Cathedral View (Click again to switch North Rose / South Narthex)"
+            title="Visão Panorâmica da Catedral (Clique novamente para alternar Rosácea Norte / Nártex Sul)"
           >
-            Cathedral
+            Catedral
           </button>
 
           <div className="hud-divider" aria-hidden="true"></div>
-          <div className="mobile-sheet-section-label">Display &amp; Gestures</div>
+          <div className="mobile-sheet-section-label">Estatísticas da Partida</div>
+          <div className="mobile-stats-card">
+            <div className="mobile-stat-box" title="Tempo total decorrido da partida">
+              <span className="mobile-stat-icon">⏱️</span>
+              <span className="mobile-stat-label">Tempo</span>
+              <strong className="mobile-stat-val" id="mobile-stats-time">00:00</strong>
+            </div>
+            <div className="mobile-stat-box" title="Número total de lances realizados">
+              <span className="mobile-stat-icon">♟️</span>
+              <span className="mobile-stat-label">Lances</span>
+              <strong className="mobile-stat-val" id="mobile-stats-moves">0</strong>
+            </div>
+            <div className="mobile-stat-box" title="Peças capturadas pelas Brancas">
+              <span className="mobile-stat-icon">⚔️</span>
+              <span className="mobile-stat-label">Brancas</span>
+              <strong className="mobile-stat-val" id="mobile-stats-cap-white">0</strong>
+            </div>
+            <div className="mobile-stat-box" title="Peças capturadas pelas Negras">
+              <span className="mobile-stat-icon">⚔️</span>
+              <span className="mobile-stat-label">Negras</span>
+              <strong className="mobile-stat-val" id="mobile-stats-cap-black">0</strong>
+            </div>
+          </div>
+
+          <div className="hud-divider" aria-hidden="true"></div>
+          <div className="mobile-sheet-section-label">Exibição e Gestos</div>
 
           <button
             className="hud-btn"
             id="btn-hide-ui"
-            title="Toggle HUD visibility (Shortcut: H)"
+            title="Alternar visibilidade do HUD (Atalho: H)"
             onClick={() => setMobileSheetOpen(false)}
           >
-            Hide UI [H]
+            Ocultar UI [H]
           </button>
 
           <div className="mobile-sheet-hint">
-            <strong>Touch:</strong> Tap Piece to Move &nbsp;•&nbsp; 1-Finger Drag: Orbit &nbsp;•&nbsp; 2-Finger Drag: Pan &nbsp;•&nbsp; Pinch: Zoom
+            <strong>Toque:</strong> Toque na peça para mover &nbsp;•&nbsp; Arrastar com 1 dedo: Orbitar &nbsp;•&nbsp; Arrastar com 2 dedos: Mover &nbsp;•&nbsp; Pinça: Zoom
           </div>
         </div>
       </div>
 
       <div id="hud-bottom">
         <div className="hint-pill" id="controls-hint">
-          <strong>Controls:</strong> Click Piece to Move &nbsp;•&nbsp; Left-Drag: Orbit &nbsp;•&nbsp; Right-Drag: Pan &nbsp;•&nbsp; Scroll: Zoom &nbsp;•&nbsp; WASD + R/F: Fly Cam &nbsp;•&nbsp; H: Hide UI
+          <strong>Controles:</strong> Clique na peça para mover &nbsp;•&nbsp; Botão esquerdo: Orbitar &nbsp;•&nbsp; Botão direito: Mover &nbsp;•&nbsp; Rolar: Zoom &nbsp;•&nbsp; WASD + R/F: Voo livre &nbsp;•&nbsp; H: Ocultar UI
         </div>
-        <div className="captured-pill" id="captured-tray"></div>
+
+        <div className="stats-pill" id="stats-panel" aria-label="Painel de Estatísticas">
+          <div className="stats-badge" title="Estatísticas da Partida">
+            <span className="stats-badge-icon">✦</span>
+            <span className="stats-badge-title">Estatísticas</span>
+          </div>
+
+          <div className="stats-metric" title="Tempo total da partida">
+            <span className="stats-icon">⏱️</span>
+            <span className="stats-label">Tempo:</span>
+            <strong className="stats-value" id="stats-time">00:00</strong>
+          </div>
+
+          <div className="stats-divider" aria-hidden="true"></div>
+
+          <div className="stats-metric" title="Total de lances realizados">
+            <span className="stats-icon">♟️</span>
+            <span className="stats-label">Lances:</span>
+            <strong className="stats-value" id="stats-moves">0</strong>
+          </div>
+
+          <div className="stats-divider" aria-hidden="true"></div>
+
+          <div className="stats-metric" title="Peças capturadas por cada jogador">
+            <span className="stats-icon">⚔️</span>
+            <span className="stats-label">Capturas:</span>
+            <div className="stats-captures-group">
+              <span className="stat-cap-side white" title="Peças capturadas pelas Brancas">
+                <span className="cap-side-indicator white"></span>
+                <span className="cap-side-name">Brancas:</span>
+                <strong id="stats-cap-white">0</strong>
+                <span className="captured-icons" id="stats-cap-white-icons"></span>
+              </span>
+              <span className="stat-cap-divider">vs</span>
+              <span className="stat-cap-side black" title="Peças capturadas pelas Negras">
+                <span className="cap-side-indicator black"></span>
+                <span className="cap-side-name">Negras:</span>
+                <strong id="stats-cap-black">0</strong>
+                <span className="captured-icons" id="stats-cap-black-icons"></span>
+              </span>
+            </div>
+          </div>
+
+          <div className="captured-pill" id="captured-tray"></div>
+        </div>
       </div>
 
       <div id="checkmate-overlay" role="status" aria-live="polite">
         <div className="checkmate-banner">
-          <div className="checkmate-ornament">✦ &nbsp; Sanctum Judgment &nbsp; ✦</div>
+          <div className="checkmate-ornament">✦ &nbsp; Julgamento do Santuário &nbsp; ✦</div>
           <div className="checkmate-crown" id="checkmate-crown">♔</div>
-          <div className="checkmate-title" id="checkmate-title">Checkmate</div>
+          <div className="checkmate-title" id="checkmate-title">Xeque-mate</div>
           <div className="checkmate-rule"></div>
           <div className="checkmate-subtitle" id="checkmate-subtitle">
-            White Triumphs • The Black King Has Fallen
+            Brancas Triunfam • O Rei Negro Caiu
           </div>
+          <div className="checkmate-stats-summary" id="checkmate-stats-summary"></div>
           <div className="checkmate-actions">
             <button className="checkmate-btn" id="btn-checkmate-replay">
-              Replay King Fall
+              Repetir Queda do Rei
             </button>
             <button className="checkmate-btn" id="btn-checkmate-newgame">
-              New Game
+              Nova Partida
             </button>
             <button className="checkmate-btn secondary" id="btn-checkmate-dismiss">
-              Dismiss
+              Fechar
             </button>
           </div>
         </div>

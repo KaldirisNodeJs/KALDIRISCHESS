@@ -206,6 +206,200 @@ html, body, #root {
   display: none;
 }
 
+/* HUD Statistics Panel */
+.stats-pill {
+  background: var(--hud-bg);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--hud-border);
+  padding: 7px 18px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  font-size: 0.82rem;
+  color: var(--text);
+  transition: all 0.22s ease;
+}
+
+.stats-pill:hover {
+  border-color: rgba(212, 175, 55, 0.6);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.7);
+}
+
+.stats-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(212, 175, 55, 0.12);
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+}
+
+.stats-badge-icon {
+  color: var(--gold-bright);
+  font-size: 0.72rem;
+}
+
+.stats-metric {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.stats-icon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.stats-label {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.78rem;
+}
+
+.stats-value {
+  color: var(--gold-bright);
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+
+.stats-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(212, 175, 55, 0.3);
+  margin: 0 2px;
+}
+
+.stats-captures-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-cap-side {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+}
+
+.cap-side-indicator {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.cap-side-indicator.white {
+  background: #f5f3ef;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+}
+
+.cap-side-indicator.black {
+  background: #20242e;
+  border: 1.5px solid var(--gold);
+  box-shadow: 0 0 6px rgba(212, 175, 55, 0.4);
+}
+
+.cap-side-name {
+  color: var(--text);
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+
+.stat-cap-side strong {
+  color: var(--gold-bright);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+}
+
+.stat-cap-divider {
+  color: var(--muted);
+  font-size: 0.72rem;
+  opacity: 0.65;
+  margin: 0 2px;
+}
+
+.captured-icons {
+  font-size: 0.88rem;
+  letter-spacing: 1px;
+  margin-left: 2px;
+  line-height: 1;
+}
+
+.captured-icons:empty {
+  display: none;
+}
+
+.checkmate-stats-summary {
+  margin: 10px 0 16px;
+  font-size: 0.84rem;
+  color: var(--gold-bright);
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 999px;
+  padding: 6px 18px;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.checkmate-stats-summary:empty {
+  display: none;
+}
+
+/* Mobile Stats Drawer Box */
+.mobile-stats-card {
+  grid-column: span 6;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  border-radius: 12px;
+  padding: 10px 6px;
+  margin-top: 2px;
+}
+
+.mobile-stat-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.mobile-stat-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.mobile-stat-label {
+  font-size: 0.66rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.mobile-stat-val {
+  font-size: 0.88rem;
+  color: var(--gold-bright);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+}
+
 /* Cinematic UI Hidden Mode */
 body.cinematic-ui-hidden #hud-top,
 body.cinematic-ui-hidden #hud-bottom {
@@ -696,6 +890,27 @@ body.cinematic-ui-hidden #hud-bottom {
   .captured-pill {
     font-size: 0.74rem;
     padding: 6px 12px;
+  }
+
+  .stats-pill {
+    padding: 6px 12px;
+    gap: 8px;
+    font-size: 0.74rem;
+    max-width: calc(100vw - 24px);
+    overflow-x: auto;
+    justify-content: center;
+  }
+
+  .stats-badge {
+    display: none;
+  }
+
+  .stats-label {
+    display: none;
+  }
+
+  .cap-side-name {
+    display: none;
   }
 
   /* Responsive Checkmate Banner on mobile screens */

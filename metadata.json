@@ -1,6 +1,6 @@
 {
-  "name": "GreekChess",
-  "description": "Interactive 3D Gothic Cathedral Wizard Chess with sculpted stone pieces, cinematic melee captures, stone shatter physics, and single-player AI.",
+  "name": "Kaldiris Chess",
+  "description": "Xadrez 3D interativo na catedral gótica Kaldiris Chess com peças de pedra esculpida, capturas dinâmicas, física de estilhaços e IA para um jogador.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
