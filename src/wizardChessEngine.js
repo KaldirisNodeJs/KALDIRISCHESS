@@ -2,6 +2,21 @@ import * as THREE_NS from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import {
+  playGameStartBellSound,
+  playMoveSound,
+  playPieceSetDownSound,
+  playAttackApproachSound,
+  playWeaponStrikeSound,
+  playStoneShatterSound,
+  playCheckWarningSound,
+  playKingCrashSound,
+  playCheckmateBannerTrophySound,
+  playPieceSelectSound,
+  toggleSound,
+  isSoundEnabled,
+  setSoundEnabled
+} from './gothicAudio.ts';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -97,7 +112,8 @@ export function initWizardChess() {
     }
 
     const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.22, 65);
-    camera.position.set(0, 2.22, 2.72);
+    // Overhead Top View by default
+    camera.position.set(0, 6.85, 3.65);
 
     const orbitControls = new OrbitControls(camera, renderer.domElement);
     orbitControls.enableDamping = true;
@@ -106,7 +122,7 @@ export function initWizardChess() {
     orbitControls.minPolarAngle = 0.05;
     orbitControls.minDistance = 0.95;
     orbitControls.maxDistance = 36.0;
-    orbitControls.target.set(0, 0.85, -0.15);
+    orbitControls.target.set(0, 0.78, 0);
     orbitControls.update();
 
     // =========================================================================
@@ -870,7 +886,34 @@ export function initWizardChess() {
     scene.add(boardGroup);
     const squareHighlightsGroup = new THREE.Group();
     scene.add(squareHighlightsGroup);
+    const simulationGraphicsGroup = new THREE.Group();
+    scene.add(simulationGraphicsGroup);
     const boardSquareMeshes = [];
+    const boardRimMeshes = [];
+
+    let origLightSqMat = null;
+    let origDarkSqMat = null;
+    const simLightSqMat = new THREE.MeshStandardMaterial({
+      color: 0x143454,
+      emissive: 0x0077b6,
+      emissiveIntensity: 0.65,
+      roughness: 0.22,
+      metalness: 0.55
+    });
+    const simDarkSqMat = new THREE.MeshStandardMaterial({
+      color: 0x061122,
+      emissive: 0x03045e,
+      emissiveIntensity: 0.55,
+      roughness: 0.28,
+      metalness: 0.70
+    });
+    const simGoldRimMat = new THREE.MeshStandardMaterial({
+      color: 0x00b4d8,
+      emissive: 0x0077b6,
+      emissiveIntensity: 0.75,
+      roughness: 0.15,
+      metalness: 0.85
+    });
 
     function buildChessBoardGrid() {
       const tileH = 0.036;
@@ -885,6 +928,9 @@ export function initWizardChess() {
         roughness: 0.28,
         metalness: 0.18
       });
+      origLightSqMat = lightSqMat;
+      origDarkSqMat = darkSqMat;
+      boardRimMeshes.length = 0;
 
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
@@ -910,11 +956,13 @@ export function initWizardChess() {
         hBar.position.set(0, BOARD_SURFACE_Y - rimH * 0.45, s * (halfB + rimW * 0.5));
         hBar.receiveShadow = true;
         boardGroup.add(hBar);
+        boardRimMeshes.push(hBar);
 
         const vBar = new THREE.Mesh(vertGeo, goldTrimMat);
         vBar.position.set(s * (halfB + rimW * 0.5), BOARD_SURFACE_Y - rimH * 0.45, 0);
         vBar.receiveShadow = true;
         boardGroup.add(vBar);
+        boardRimMeshes.push(vBar);
       }
     }
 
@@ -1504,6 +1552,11 @@ export function initWizardChess() {
       if (mMovesEl) mMovesEl.textContent = String(moveHistory.length);
       if (mCapWhiteEl) mCapWhiteEl.textContent = String(capturedByWhite);
       if (mCapBlackEl) mCapBlackEl.textContent = String(capturedByBlack);
+
+      const topTimeEl = document.getElementById('top-timer');
+      const cinematicTimeEl = document.getElementById('cinematic-stats-time');
+      if (topTimeEl) topTimeEl.textContent = `⏱️ ${formatted}`;
+      if (cinematicTimeEl) cinematicTimeEl.textContent = formatted;
     }
 
     if (!gameTimerInterval) {
@@ -1512,16 +1565,22 @@ export function initWizardChess() {
           gameElapsedSeconds = Math.floor((Date.now() - gameStartTime) / 1000);
           const timeEl = document.getElementById('stats-time');
           const mTimeEl = document.getElementById('mobile-stats-time');
+          const topTimeEl = document.getElementById('top-timer');
+          const cinematicTimeEl = document.getElementById('cinematic-stats-time');
           const formatted = formatTime(gameElapsedSeconds);
           if (timeEl) timeEl.textContent = formatted;
           if (mTimeEl) mTimeEl.textContent = formatted;
+          if (topTimeEl) topTimeEl.textContent = `⏱️ ${formatted}`;
+          if (cinematicTimeEl) cinematicTimeEl.textContent = formatted;
         }
       }, 1000);
     }
 
     // Mode & Player Configuration
-    let gameMode = 'single'; // 'single' | 'multi'
+    let gameMode = 'single'; // 'single' | 'local' | 'multi'
     let playerColor = 'w';   // 'w' | 'b' | 'spectator'
+    let playerWhiteName = 'Jogador 1';
+    let playerBlackName = 'IA Kaldiris';
     let aiAutoPlay = true;
     let aiTimer = null;
 
@@ -1851,8 +1910,10 @@ export function initWizardChess() {
       gameElapsedSeconds = 0;
       moveHistory = [];
       scriptDeviated = false;
+      lastCheckSoundTurn = null;
       if (!preserveScript) {
         scriptCursor = 0;
+        playGameStartBellSound();
       }
 
       const backRow = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
@@ -1864,10 +1925,12 @@ export function initWizardChess() {
       }
 
       if (orientCamera) {
-        const viewSide = playerColor === 'b' ? 'b' : 'w';
-        playerCamSide = viewSide;
-        setActiveCamButton('btn-cam-player');
-        setCameraForSide(viewSide, false);
+        overheadCamSide = playerColor === 'b' ? 'b' : 'w';
+        setActiveCamButton('btn-cam-top');
+        const zSign = overheadCamSide === 'b' ? -1 : 1;
+        camera.position.set(0, 6.85, zSign * 3.65);
+        orbitControls.target.set(0, 0.78, 0);
+        orbitControls.update();
       }
 
       renderer.shadowMap.needsUpdate = true;
@@ -2589,10 +2652,12 @@ export function initWizardChess() {
           const promoted = instantiatePiece('queen', piece.color, toR, toC);
           promoted.hasMoved = true;
           boardState[toR][toC] = promoted;
+          playPieceSetDownSound('queen');
         } else {
           piece.mesh.position.copy(endPos);
           piece.mesh.rotation.y = piece.color === 'w' ? Math.PI : 0;
           playPieceClip(piece, 'Idle', true, 0.18);
+          playPieceSetDownSound(piece.type);
         }
 
         if (isCapture) {
@@ -2738,6 +2803,7 @@ export function initWizardChess() {
               (atkClipTime >= CONTACT_CLIP_TIME || elapsed >= tContact + 0.06)
             ) {
               defenderFlinchTriggered = true;
+              playWeaponStrikeSound(piece.type);
               if (captured) {
                 playPieceClip(captured, 'Shatter', false, 0.04);
                 impactFlashLight.position.set(
@@ -2752,6 +2818,7 @@ export function initWizardChess() {
             // Blow Burst: after visible weapon impact & follow-through, defender explodes into stone shards!
             if (!shatterTriggered && (atkClipTime >= BLOW_CLIP_TIME || elapsed >= tImpact + 0.06)) {
               shatterTriggered = true;
+              playStoneShatterSound();
               impactActualTime = elapsed;
               postShatterPiecePos.copy(piece.mesh.position);
               if (captured && captured.mesh) {
@@ -2826,6 +2893,12 @@ export function initWizardChess() {
           return true;
         }
         return false;
+      }
+
+      if (isCapture) {
+        playAttackApproachSound(piece.type);
+      } else {
+        playMoveSound(piece.type);
       }
 
       activeMoveTweens.push(stepMove);
@@ -2932,6 +3005,445 @@ export function initWizardChess() {
           }
         }, 540);
       }
+    }
+
+    // =========================================================================
+    // Auto-Flip Camera to Active Turn Player ("Virar p/ Jogador")
+    // =========================================================================
+    let autoFlipToPlayerTurn = false;
+
+    function orientCameraToCurrentTurnPlayer() {
+      if (isAnimatingMove) return;
+      const turnSide = currentTurn === 'b' ? 'b' : 'w';
+      const isTopActive =
+        document.getElementById('btn-cam-top')?.classList.contains('active') ||
+        camera.position.y > 4.5;
+
+      if (isTopActive) {
+        overheadCamSide = turnSide;
+        const zSign = turnSide === 'b' ? -1 : 1;
+        smoothCameraTo(new THREE.Vector3(0, 6.85, zSign * 3.65), new THREE.Vector3(0, 0.78, 0), 0.75);
+      } else {
+        playerCamSide = turnSide;
+        setCameraForSide(turnSide, false);
+      }
+    }
+
+    function setAutoFlipToPlayerTurn(enabled) {
+      autoFlipToPlayerTurn = Boolean(enabled);
+      const chk = document.getElementById('chk-auto-flip');
+      if (chk) chk.checked = autoFlipToPlayerTurn;
+      if (autoFlipToPlayerTurn) {
+        orientCameraToCurrentTurnPlayer();
+      }
+      return autoFlipToPlayerTurn;
+    }
+
+    // =========================================================================
+    // Move History Formatting & Algebraic Notation
+    // =========================================================================
+    function squareToAlgebraic(r, c) {
+      return String.fromCharCode(97 + c) + (8 - r);
+    }
+
+    const PIECE_SAN_PT = {
+      pawn: '',
+      knight: 'C',
+      bishop: 'B',
+      rook: 'T',
+      queen: 'D',
+      king: 'R'
+    };
+
+    function formatMoveSAN(mv) {
+      if (!mv) return '';
+      if (mv.castle) return mv.castle === 'q' ? 'O-O-O' : 'O-O';
+      if (mv.pieceType === 'king' && Math.abs(mv.toC - mv.fromC) === 2) {
+        return mv.toC > mv.fromC ? 'O-O' : 'O-O-O';
+      }
+      const pLetter = PIECE_SAN_PT[mv.pieceType] || '';
+      const destAlg = squareToAlgebraic(mv.toR, mv.toC);
+      if (mv.capture) {
+        if (mv.pieceType === 'pawn') {
+          return String.fromCharCode(97 + mv.fromC) + 'x' + destAlg;
+        }
+        return pLetter + 'x' + destAlg;
+      }
+      return (pLetter ? pLetter : '') + destAlg;
+    }
+
+    function getMoveHistoryFormatted() {
+      const turns = [];
+      for (let i = 0; i < moveHistory.length; i++) {
+        const item = moveHistory[i];
+        const turnIdx = Math.floor(i / 2);
+        if (!turns[turnIdx]) {
+          turns[turnIdx] = { moveNumber: turnIdx + 1, white: null, black: null };
+        }
+        const mvObj = {
+          san: item.move.san || formatMoveSAN(item.move),
+          from: squareToAlgebraic(item.move.fromR, item.move.fromC),
+          to: squareToAlgebraic(item.move.toR, item.move.toC),
+          piece: item.move.pieceType,
+          capture: item.move.capture,
+          color: item.move.color
+        };
+        if (item.move.color === 'w') {
+          turns[turnIdx].white = mvObj;
+        } else {
+          turns[turnIdx].black = mvObj;
+        }
+      }
+      return turns;
+    }
+
+    // =========================================================================
+    // Tactical Move Simulator (Simulador de Movimentos da IA)
+    // =========================================================================
+    let simulationModeActive = false;
+    let simulationSelectedMoveIndex = 0;
+    let simulationTopMoves = [];
+
+    function clearSimulation3DGraphics() {
+      while (simulationGraphicsGroup.children.length > 0) {
+        const obj = simulationGraphicsGroup.children[0];
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+          else obj.material.dispose();
+        }
+        simulationGraphicsGroup.remove(obj);
+      }
+    }
+
+    function getTop3SimulatedMoves(color = currentTurn) {
+      const legalMoves = getAllLegalMoves(color);
+      if (legalMoves.length === 0) return [];
+
+      const scored = [];
+      const oppColor = color === 'w' ? 'b' : 'w';
+
+      for (const m of legalMoves) {
+        const piece = boardState[m.fromR][m.fromC];
+        const target = boardState[m.toR][m.toC];
+        let score = 0;
+        let reasons = [];
+
+        // 1. Material Capture
+        if (target) {
+          const valGain = PIECE_VALUES[target.type] * 1.25 - PIECE_VALUES[piece.type] * 0.1;
+          score += valGain;
+          const targetName =
+            target.type === 'queen'
+              ? 'Rainha'
+              : target.type === 'rook'
+              ? 'Torre'
+              : target.type === 'bishop'
+              ? 'Bispo'
+              : target.type === 'knight'
+              ? 'Cavalo'
+              : 'Peão';
+          reasons.push(`Captura de ${targetName} (+${(valGain / 100).toFixed(1)})`);
+        }
+
+        // 2. Center Dominance (squares d4, e4, d5, e5)
+        const centerDist = Math.abs(3.5 - m.toR) + Math.abs(3.5 - m.toC);
+        const centerGain = (7 - centerDist) * 12;
+        score += centerGain;
+        if (centerDist <= 1.5) {
+          reasons.push('Controle direto do centro do santuário');
+        }
+
+        // 3. Pawn Advancement
+        if (piece.type === 'pawn') {
+          const advance = color === 'w' ? 6 - m.toR : m.toR - 1;
+          score += advance * 15;
+          if (m.toR === (color === 'w' ? 0 : 7)) {
+            score += 850;
+            reasons.push('Promoção iminente a Rainha');
+          }
+        }
+
+        // 4. King Check & Tactical Attack
+        boardState[m.toR][m.toC] = piece;
+        boardState[m.fromR][m.fromC] = null;
+
+        const causesCheck = isKingInCheck(oppColor, boardState);
+        if (causesCheck) {
+          score += 65;
+          reasons.push('Xeque ameaçador contra o Rei');
+        }
+
+        // 5. Opponent Recapture Threat Check
+        let isHanging = false;
+        for (let rr = 0; rr < 8; rr++) {
+          for (let cc = 0; cc < 8; cc++) {
+            const opp = boardState[rr][cc];
+            if (opp && opp.color === oppColor) {
+              const oppMoves = getPseudoMovesForPiece(rr, cc, boardState);
+              if (oppMoves.some((om) => om.r === m.toR && om.c === m.toC)) {
+                score -= PIECE_VALUES[piece.type] * 0.72;
+                isHanging = true;
+                break;
+              }
+            }
+          }
+          if (isHanging) break;
+        }
+
+        // 6. Predict Opponent's Best Reply
+        const oppReply = chooseSmartAIMove(oppColor);
+        let predictedReplySAN = '';
+        let replyPieceName = '';
+        if (oppReply) {
+          const oppPiece = boardState[oppReply.fromR]?.[oppReply.fromC];
+          predictedReplySAN = formatMoveSAN({
+            ...oppReply,
+            pieceType: oppPiece ? oppPiece.type : 'pawn'
+          });
+          replyPieceName = oppPiece ? oppPiece.type : 'peça';
+        }
+
+        boardState[m.fromR][m.fromC] = piece;
+        boardState[m.toR][m.toC] = target;
+
+        const moveSan = formatMoveSAN({
+          ...m,
+          pieceType: piece.type
+        });
+
+        if (reasons.length === 0) {
+          reasons.push('Desenvolvimento e melhoria do posicionamento');
+        }
+
+        scored.push({
+          move: m,
+          san: moveSan,
+          fromAlg: squareToAlgebraic(m.fromR, m.fromC),
+          toAlg: squareToAlgebraic(m.toR, m.toC),
+          pieceType: piece.type,
+          pieceColor: piece.color,
+          rawScore: score,
+          displayScore: (score / 100).toFixed(1),
+          description: reasons.join(' • '),
+          isCapture: Boolean(target),
+          isCheck: causesCheck,
+          predictedReply: oppReply
+            ? {
+                fromR: oppReply.fromR,
+                fromC: oppReply.fromC,
+                toR: oppReply.toR,
+                toC: oppReply.toC,
+                san: predictedReplySAN,
+                piece: replyPieceName,
+                fromAlg: squareToAlgebraic(oppReply.fromR, oppReply.fromC),
+                toAlg: squareToAlgebraic(oppReply.toR, oppReply.toC)
+              }
+            : null
+        });
+      }
+
+      scored.sort((a, b) => b.rawScore - a.rawScore);
+
+      const badges = ['✦ Melhor Lance', 'Opção Sólida', 'Linha Agressiva'];
+      const top3 = scored.slice(0, 3).map((item, idx) => ({
+        rank: idx + 1,
+        badge: badges[idx] || `Opção ${idx + 1}`,
+        ...item
+      }));
+
+      return top3;
+    }
+
+    function renderSimulation3DGraphics(topMoves, selectedIdx = 0) {
+      clearSimulation3DGraphics();
+      if (!topMoves || topMoves.length === 0) return;
+
+      const PALETTE = [
+        { primary: 0x00f5d4, emissive: 0x00b4d8 }, // Cyan
+        { primary: 0xffd166, emissive: 0xf77f00 }, // Amber
+        { primary: 0xf72585, emissive: 0x7209b7 }  // Magenta
+      ];
+
+      topMoves.forEach((item, idx) => {
+        const isSelected = idx === selectedIdx;
+        const colorCfg = PALETTE[idx % PALETTE.length];
+        const m = item.move;
+
+        const startPos = boardToWorld(m.fromR, m.fromC);
+        const endPos = boardToWorld(m.toR, m.toC);
+
+        // 1. Starting Square Hologram Ring
+        const ringGeo = new THREE.RingGeometry(0.10, isSelected ? 0.155 : 0.135, 32);
+        ringGeo.rotateX(-Math.PI / 2);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: colorCfg.primary,
+          transparent: true,
+          opacity: isSelected ? 0.95 : 0.45,
+          side: THREE.DoubleSide
+        });
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+        ringMesh.position.set(startPos.x, BOARD_SURFACE_Y + 0.012 + idx * 0.002, startPos.z);
+        simulationGraphicsGroup.add(ringMesh);
+
+        // 2. Parabolic 3D Trajectory Arc Tube
+        const apexY = BOARD_SURFACE_Y + (isSelected ? 0.42 : 0.28) + (2 - idx) * 0.08;
+        const midPos = new THREE.Vector3(
+          (startPos.x + endPos.x) * 0.5,
+          apexY,
+          (startPos.z + endPos.z) * 0.5
+        );
+        const curve = new THREE.QuadraticBezierCurve3(
+          new THREE.Vector3(startPos.x, BOARD_SURFACE_Y + 0.02, startPos.z),
+          midPos,
+          new THREE.Vector3(endPos.x, BOARD_SURFACE_Y + 0.02, endPos.z)
+        );
+
+        const tubeGeo = new THREE.TubeGeometry(curve, 36, isSelected ? 0.016 : 0.010, 8, false);
+        const tubeMat = new THREE.MeshStandardMaterial({
+          color: colorCfg.primary,
+          emissive: colorCfg.emissive,
+          emissiveIntensity: isSelected ? 1.4 : 0.6,
+          roughness: 0.18,
+          metalness: 0.6,
+          transparent: true,
+          opacity: isSelected ? 0.95 : 0.45
+        });
+        const tubeMesh = new THREE.Mesh(tubeGeo, tubeMat);
+        simulationGraphicsGroup.add(tubeMesh);
+
+        // 3. Destination Target Target Indicator (Nested Rings + Target Disc)
+        const destOuterGeo = new THREE.RingGeometry(0.12, isSelected ? 0.165 : 0.14, 32);
+        destOuterGeo.rotateX(-Math.PI / 2);
+        const destOuterMat = new THREE.MeshBasicMaterial({
+          color: colorCfg.primary,
+          transparent: true,
+          opacity: isSelected ? 0.95 : 0.45,
+          side: THREE.DoubleSide
+        });
+        const destOuterMesh = new THREE.Mesh(destOuterGeo, destOuterMat);
+        destOuterMesh.position.set(endPos.x, BOARD_SURFACE_Y + 0.014 + idx * 0.002, endPos.z);
+        simulationGraphicsGroup.add(destOuterMesh);
+
+        const destCenterGeo = new THREE.CircleGeometry(isSelected ? 0.055 : 0.04, 24);
+        destCenterGeo.rotateX(-Math.PI / 2);
+        const destCenterMat = new THREE.MeshBasicMaterial({
+          color: colorCfg.primary,
+          transparent: true,
+          opacity: isSelected ? 0.85 : 0.35,
+          side: THREE.DoubleSide
+        });
+        const destCenterMesh = new THREE.Mesh(destCenterGeo, destCenterMat);
+        destCenterMesh.position.set(endPos.x, BOARD_SURFACE_Y + 0.016 + idx * 0.002, endPos.z);
+        simulationGraphicsGroup.add(destCenterMesh);
+
+        // 4. Ghost Piece Hologram on Destination Square for Selected Move
+        if (isSelected) {
+          const ghostH = 0.36;
+          const ghostGeo = new THREE.CylinderGeometry(0.06, 0.11, ghostH, 16);
+          const ghostMat = new THREE.MeshStandardMaterial({
+            color: colorCfg.primary,
+            emissive: colorCfg.emissive,
+            emissiveIntensity: 0.85,
+            roughness: 0.2,
+            metalness: 0.5,
+            transparent: true,
+            opacity: 0.55
+          });
+          const ghostMesh = new THREE.Mesh(ghostGeo, ghostMat);
+          ghostMesh.position.set(endPos.x, BOARD_SURFACE_Y + ghostH * 0.5, endPos.z);
+          simulationGraphicsGroup.add(ghostMesh);
+
+          // 5. Opponent's Predicted Response Trajectory (Orange/Red Contrasting Arc)
+          if (item.predictedReply) {
+            const opp = item.predictedReply;
+            const oppStart = boardToWorld(opp.fromR, opp.fromC);
+            const oppEnd = boardToWorld(opp.toR, opp.toC);
+            const oppApexY = BOARD_SURFACE_Y + 0.22;
+            const oppMid = new THREE.Vector3(
+              (oppStart.x + oppEnd.x) * 0.5,
+              oppApexY,
+              (oppStart.z + oppEnd.z) * 0.5
+            );
+            const oppCurve = new THREE.QuadraticBezierCurve3(
+              new THREE.Vector3(oppStart.x, BOARD_SURFACE_Y + 0.02, oppStart.z),
+              oppMid,
+              new THREE.Vector3(oppEnd.x, BOARD_SURFACE_Y + 0.02, oppEnd.z)
+            );
+            const oppTubeGeo = new THREE.TubeGeometry(oppCurve, 32, 0.010, 8, false);
+            const oppTubeMat = new THREE.MeshStandardMaterial({
+              color: 0xff5400,
+              emissive: 0x9e0059,
+              emissiveIntensity: 0.9,
+              transparent: true,
+              opacity: 0.82
+            });
+            const oppTubeMesh = new THREE.Mesh(oppTubeGeo, oppTubeMat);
+            simulationGraphicsGroup.add(oppTubeMesh);
+
+            // Opponent destination marker
+            const oppRingGeo = new THREE.RingGeometry(0.08, 0.12, 24);
+            oppRingGeo.rotateX(-Math.PI / 2);
+            const oppRingMat = new THREE.MeshBasicMaterial({
+              color: 0xff5400,
+              transparent: true,
+              opacity: 0.8,
+              side: THREE.DoubleSide
+            });
+            const oppRingMesh = new THREE.Mesh(oppRingGeo, oppRingMat);
+            oppRingMesh.position.set(oppEnd.x, BOARD_SURFACE_Y + 0.015, oppEnd.z);
+            simulationGraphicsGroup.add(oppRingMesh);
+          }
+        }
+      });
+
+      renderer.shadowMap.needsUpdate = true;
+    }
+
+    function setSimulationMode(active) {
+      simulationModeActive = Boolean(active);
+      if (simulationModeActive) {
+        // Transform board squares to glowing ethereal tactical matrix
+        for (const sq of boardSquareMeshes) {
+          const isLight = (sq.userData.r + sq.userData.c) % 2 === 0;
+          sq.material = isLight ? simLightSqMat : simDarkSqMat;
+        }
+        for (const rim of boardRimMeshes) {
+          rim.material = simGoldRimMat;
+        }
+        simulationTopMoves = getTop3SimulatedMoves(currentTurn);
+        simulationSelectedMoveIndex = 0;
+        renderSimulation3DGraphics(simulationTopMoves, 0);
+      } else {
+        // Restore standard stone board squares
+        for (const sq of boardSquareMeshes) {
+          const isLight = (sq.userData.r + sq.userData.c) % 2 === 0;
+          sq.material = isLight ? origLightSqMat : origDarkSqMat;
+        }
+        for (const rim of boardRimMeshes) {
+          rim.material = goldTrimMat;
+        }
+        clearSimulation3DGraphics();
+        simulationTopMoves = [];
+      }
+      renderer.shadowMap.needsUpdate = true;
+      return { active: simulationModeActive, moves: simulationTopMoves };
+    }
+
+    function selectSimulatedMove(idx) {
+      if (!simulationModeActive) return;
+      const count = simulationTopMoves ? simulationTopMoves.length : 0;
+      simulationSelectedMoveIndex = Math.max(0, Math.min(count - 1, idx));
+      renderSimulation3DGraphics(simulationTopMoves, simulationSelectedMoveIndex);
+    }
+
+    function executeSimulatedMove(idx) {
+      if (!simulationTopMoves || simulationTopMoves.length === 0) return false;
+      const targetIdx = typeof idx === 'number' ? idx : simulationSelectedMoveIndex;
+      const chosen = simulationTopMoves[targetIdx];
+      if (!chosen) return false;
+      setSimulationMode(false);
+      return executeChessMove(chosen.move.fromR, chosen.move.fromC, chosen.move.toR, chosen.move.toC);
     }
 
     // =========================================================================
@@ -3490,13 +4002,14 @@ export function initWizardChess() {
       const titleEl = document.getElementById('checkmate-title');
       const subEl = document.getElementById('checkmate-subtitle');
 
-      const winnerName = winnerColor === 'w' ? 'Brancas' : 'Negras';
-      const defeatedNoun = defeatedColor === 'w' ? 'Branco' : 'Negro';
+      const winnerName = winnerColor === 'w' ? playerWhiteName : playerBlackName;
+      const defeatedName = defeatedColor === 'w' ? playerWhiteName : playerBlackName;
+      const winnerSide = winnerColor === 'w' ? 'Brancas' : 'Negras';
 
       if (crownEl) crownEl.textContent = winnerColor === 'w' ? '♔' : '♚';
       if (titleEl) titleEl.textContent = 'Xeque-mate';
       if (subEl) {
-        subEl.textContent = `${winnerName} Triunfam • O Rei ${defeatedNoun} Caiu`;
+        subEl.textContent = `${winnerName} (${winnerSide}) Triunfou! O Rei de ${defeatedName} Caiu`;
       }
       const statsSummaryEl = document.getElementById('checkmate-stats-summary');
       if (statsSummaryEl) {
@@ -3506,6 +4019,7 @@ export function initWizardChess() {
         overlay.classList.add('visible');
       }
       checkmateState.bannerVisible = true;
+      playCheckmateBannerTrophySound();
     }
 
     function triggerCheckmateSequence(defeatedColor = currentTurn, winnerColor = null) {
@@ -3722,6 +4236,7 @@ export function initWizardChess() {
               homePos.z + fallDirZ * 0.45
             );
             spawnKingFallImpact(crownImpactPos, defeatedColor);
+            playKingCrashSound();
           }
 
           const uBounce = Math.min(1, (elapsed - tImpact) / (tTotal - tImpact));
@@ -3755,6 +4270,8 @@ export function initWizardChess() {
     // =========================================================================
     // UI & Turn Status Updates
     // =========================================================================
+    let lastCheckSoundTurn = null;
+
     function updateTurnUI() {
       const turnDot = document.getElementById('turn-dot');
       const turnText = document.getElementById('turn-text');
@@ -3764,7 +4281,22 @@ export function initWizardChess() {
       const roomPill = document.getElementById('room-pill');
       const capturedTray = document.getElementById('captured-tray');
 
-      turnDot.className = 'turn-dot' + (currentTurn === 'b' ? ' black' : '');
+      if (turnDot) {
+        turnDot.className = 'turn-dot' + (currentTurn === 'b' ? ' black' : '');
+      }
+
+      const activePlayerName = currentTurn === 'w' ? playerWhiteName : playerBlackName;
+      const activeColorLabel = currentTurn === 'w' ? 'Brancas' : 'Negras';
+
+      const whiteNameEl = document.getElementById('name-player-white');
+      const blackNameEl = document.getElementById('name-player-black');
+      const whiteBadgeEl = document.getElementById('badge-player-white');
+      const blackBadgeEl = document.getElementById('badge-player-black');
+
+      if (whiteNameEl) whiteNameEl.textContent = playerWhiteName;
+      if (blackNameEl) blackNameEl.textContent = playerBlackName;
+      if (whiteBadgeEl) whiteBadgeEl.classList.toggle('active-turn', currentTurn === 'w');
+      if (blackBadgeEl) blackBadgeEl.classList.toggle('active-turn', currentTurn === 'b');
 
       const legalMoves = getAllLegalMoves(currentTurn);
       const inCheck = isKingInCheck(currentTurn, boardState);
@@ -3772,35 +4304,47 @@ export function initWizardChess() {
       if (legalMoves.length === 0) {
         gameOver = true;
         if (inCheck) {
-          const winner = currentTurn === 'w' ? 'Negras' : 'Brancas';
-          turnText.textContent = `Xeque-mate — ${winner} Vencem`;
+          const winner = currentTurn === 'w' ? playerBlackName : playerWhiteName;
+          if (turnText) turnText.textContent = `Xeque-mate — ${winner} Venceu`;
           if (!checkmateState.active) {
             triggerCheckmateSequence(currentTurn, currentTurn === 'w' ? 'b' : 'w');
           }
         } else {
-          turnText.textContent = 'Empate — Afogamento';
+          if (turnText) turnText.textContent = 'Empate — Afogamento';
         }
       } else {
-        const turnLabel = currentTurn === 'w' ? 'Vez das Brancas' : 'Vez das Negras';
         const aiColor = playerColor === 'w' ? 'b' : 'w';
         const isAiTurn = !scriptedGameActive && gameMode === 'single' && currentTurn === aiColor;
         if (inCheck) {
-          turnText.textContent = `${turnLabel} (Xeque!)`;
-        } else if (isAiTurn) {
-          turnText.textContent = `${turnLabel} (IA pensando...)`;
+          if (turnText) turnText.textContent = `Vez de: ${activePlayerName} (${activeColorLabel}) — XEQUE!`;
+          if (lastCheckSoundTurn !== currentTurn) {
+            lastCheckSoundTurn = currentTurn;
+            playCheckWarningSound();
+          }
         } else {
-          turnText.textContent = turnLabel;
+          lastCheckSoundTurn = null;
+          if (isAiTurn) {
+            if (turnText) turnText.textContent = `Vez de: ${activePlayerName} (IA pensando...)`;
+          } else {
+            if (turnText) turnText.textContent = `Vez de: ${activePlayerName} (${activeColorLabel})`;
+          }
         }
       }
 
       if (modeBadge) {
-        modeBadge.textContent = `Jogando de ${playerColor === 'w' ? 'Brancas' : 'Negras'}`;
+        if (gameMode === 'local') {
+          modeBadge.textContent = '2 Jogadores (Mesmo PC)';
+        } else if (gameMode === 'multi') {
+          modeBadge.textContent = roomCode ? `Remoto (${roomCode})` : 'Remoto';
+        } else {
+          modeBadge.textContent = `Contra IA (${playerColor === 'w' ? 'Brancas' : 'Negras'})`;
+        }
       }
       if (btnAiMove) {
-        btnAiMove.style.display = 'inline-flex';
+        btnAiMove.style.display = gameMode === 'single' ? 'inline-flex' : 'none';
       }
       if (btnSideToggle) {
-        btnSideToggle.style.display = 'inline-flex';
+        btnSideToggle.style.display = gameMode === 'single' ? 'inline-flex' : 'none';
         btnSideToggle.textContent = playerColor === 'w' ? 'Jogar de Negras' : 'Jogar de Brancas';
       }
       if (roomPill) {
@@ -3813,6 +4357,14 @@ export function initWizardChess() {
         capturedTray.textContent = '';
       }
       updateStatsUI();
+      if (autoFlipToPlayerTurn && !isAnimatingMove && !gameOver) {
+        orientCameraToCurrentTurnPlayer();
+      }
+      if (simulationModeActive) {
+        simulationTopMoves = getTop3SimulatedMoves(currentTurn);
+        simulationSelectedMoveIndex = 0;
+        renderSimulation3DGraphics(simulationTopMoves, 0);
+      }
       if (typeof updateScriptBarUI === 'function') updateScriptBarUI();
     }
 
@@ -3901,6 +4453,7 @@ export function initWizardChess() {
         selectedSquare = { r: clickedR, c: clickedC };
         validMoves = getLegalMovesForPiece(clickedR, clickedC);
         showSquareHighlights(clickedR, clickedC, validMoves);
+        playPieceSelectSound();
       } else {
         clearSquareHighlights();
         selectedSquare = null;
@@ -4025,6 +4578,8 @@ export function initWizardChess() {
 
     function applyRemoteRoomState(room) {
       if (!room) return;
+      if (room.whitePlayer?.name) playerWhiteName = room.whitePlayer.name;
+      if (room.blackPlayer?.name) playerBlackName = room.blackPlayer.name;
       const statusEl = document.getElementById('hud-room-status');
       const bothReady = room.whiteJoined && room.blackJoined;
       if (statusEl) {
@@ -4033,9 +4588,10 @@ export function initWizardChess() {
       const mpMsg = document.getElementById('mp-status-msg');
       if (mpMsg && roomCode) {
         mpMsg.textContent = bothReady
-          ? `Ambos os jogadores conectados à Sala ${room.code}!`
+          ? `Ambos conectados: ${playerWhiteName} (Brancas) vs ${playerBlackName} (Negras)`
           : `Sala ${room.code} pronta — aguardando segundo jogador entrar...`;
       }
+      updateTurnUI();
 
       if (room.resetCount > appliedResetCount) {
         appliedResetCount = room.resetCount;
@@ -4103,15 +4659,16 @@ export function initWizardChess() {
       }, 1500);
     }
 
-    async function createMultiplayerRoom(preferredColor) {
+    async function createMultiplayerRoom(preferredColor, playerName = 'Jogador 1') {
+      const cleanName = (playerName || '').trim() || 'Jogador 1';
       const mpMsg = document.getElementById('mp-status-msg');
-      mpMsg.textContent = 'Criando sala...';
+      if (mpMsg) mpMsg.textContent = 'Criando sala...';
       ensurePlayerToken();
 
       let data = await mpApiRequest('/api/rooms/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preferredColor, playerToken })
+        body: JSON.stringify({ preferredColor, playerToken, playerName: cleanName })
       });
 
       // Pure static fallback if neither local nor remote server is reachable
@@ -4127,6 +4684,8 @@ export function initWizardChess() {
           status: 'waiting',
           whiteJoined: side === 'w',
           blackJoined: side === 'b',
+          whitePlayer: side === 'w' ? { token: playerToken, name: cleanName, color: 'w' } : null,
+          blackPlayer: side === 'b' ? { token: playerToken, name: cleanName, color: 'b' } : null,
           turn: 'w',
           moves: [],
           resetCount: 0,
@@ -4138,6 +4697,7 @@ export function initWizardChess() {
           code: genCode,
           color: side,
           playerToken,
+          playerName: cleanName,
           room: staticRoom
         };
       } else if (data.room) {
@@ -4155,29 +4715,41 @@ export function initWizardChess() {
       appliedMoveSeq = 0;
       appliedResetCount = data.room.resetCount || 0;
 
-      document.getElementById('modal-room-code').textContent = roomCode;
-      document.getElementById('room-created-panel').style.display = 'block';
+      if (data.color === 'w') {
+        playerWhiteName = cleanName;
+        playerBlackName = 'Aguardando Oponente...';
+      } else {
+        playerWhiteName = 'Aguardando Oponente...';
+        playerBlackName = cleanName;
+      }
+
+      const roomCodeEl = document.getElementById('modal-room-code');
+      if (roomCodeEl) roomCodeEl.textContent = roomCode;
+      const roomCreatedPanel = document.getElementById('room-created-panel');
+      if (roomCreatedPanel) roomCreatedPanel.style.display = 'block';
 
       resetChessBoard(true);
       startMultiplayerSync(roomCode);
       applyRemoteRoomState(data.room);
       window.history.replaceState({}, '', `?room=${roomCode}`);
+      return data;
     }
 
-    async function joinMultiplayerRoom(codeInput) {
+    async function joinMultiplayerRoom(codeInput, playerName = 'Jogador 2') {
       const code = String(codeInput || '').trim().toUpperCase();
+      const cleanName = (playerName || '').trim() || 'Jogador 2';
       const mpMsg = document.getElementById('mp-status-msg');
       if (!code) {
-        mpMsg.textContent = 'Por favor, insira um código de sala de 4 caracteres.';
-        return false;
+        if (mpMsg) mpMsg.textContent = 'Por favor, insira um código de sala de 4 caracteres.';
+        return { ok: false, error: 'Código de sala inválido' };
       }
-      mpMsg.textContent = `Entrando na sala ${code}...`;
+      if (mpMsg) mpMsg.textContent = `Entrando na sala ${code}...`;
       ensurePlayerToken();
 
       let data = await mpApiRequest('/api/rooms/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, playerToken })
+        body: JSON.stringify({ code, playerToken, playerName: cleanName })
       });
 
       if (!data || !data.ok) {
@@ -4188,18 +4760,25 @@ export function initWizardChess() {
             status: 'playing',
             whiteJoined: true,
             blackJoined: true,
+            whitePlayer: { token: 'host_auto', name: 'Jogador 1', color: 'w' },
+            blackPlayer: { token: playerToken, name: cleanName, color: 'b' },
             turn: 'w',
             moves: [],
             resetCount: 0,
             updatedAt: Date.now()
           };
         } else {
-          if (!stRoom.whiteJoined) stRoom.whiteJoined = true;
-          else if (!stRoom.blackJoined) stRoom.blackJoined = true;
+          if (!stRoom.whiteJoined) {
+            stRoom.whiteJoined = true;
+            stRoom.whitePlayer = { token: playerToken, name: cleanName, color: 'w' };
+          } else if (!stRoom.blackJoined) {
+            stRoom.blackJoined = true;
+            stRoom.blackPlayer = { token: playerToken, name: cleanName, color: 'b' };
+          }
           stRoom.status = stRoom.whiteJoined && stRoom.blackJoined ? 'playing' : 'waiting';
           stRoom.updatedAt = Date.now();
         }
-        const assignedColor = !stRoom.blackJoined ? 'w' : 'b';
+        const assignedColor = stRoom.blackPlayer?.token === playerToken ? 'b' : 'w';
         saveAndBroadcastStaticRoom(stRoom);
         data = {
           ok: true,
@@ -4223,12 +4802,14 @@ export function initWizardChess() {
       appliedMoveSeq = 0;
       appliedResetCount = data.room.resetCount || 0;
 
+      if (data.room?.whitePlayer?.name) playerWhiteName = data.room.whitePlayer.name;
+      if (data.room?.blackPlayer?.name) playerBlackName = data.room.blackPlayer.name;
+
       resetChessBoard(true);
       startMultiplayerSync(roomCode);
       applyRemoteRoomState(data.room);
       window.history.replaceState({}, '', `?room=${roomCode}`);
-      closeLobbyModal();
-      return true;
+      return data;
     }
 
     // =========================================================================
@@ -4328,6 +4909,10 @@ export function initWizardChess() {
     document.getElementById('btn-cam-side')?.addEventListener('click', () => setCameraPreset('side'));
     document.getElementById('btn-cam-wide')?.addEventListener('click', () => setCameraPreset('wide'));
     document.getElementById('btn-hide-ui')?.addEventListener('click', () => toggleUI());
+    document.getElementById('btn-cinematic-restore')?.addEventListener('click', () => toggleUI(false));
+    document.getElementById('chk-auto-flip')?.addEventListener('change', (e) => {
+      setAutoFlipToPlayerTurn(e.target.checked);
+    });
 
     document.getElementById('btn-script-modal')?.addEventListener('click', () => openLobbyModal('script'));
     document.getElementById('btn-script-prev')?.addEventListener('click', () => stepScriptBackward());
@@ -4343,7 +4928,7 @@ export function initWizardChess() {
       resetChessBoard(true, scriptedGameActive);
     });
 
-    document.getElementById('btn-reset')?.addEventListener('click', async () => {
+    function performGameReset() {
       if (gameMode === 'multi' && roomCode) {
         const stRoom = getStaticRoom(roomCode);
         if (stRoom) {
@@ -4354,10 +4939,21 @@ export function initWizardChess() {
           saveAndBroadcastStaticRoom(stRoom);
           applyRemoteRoomState(stRoom);
         }
-        await mpApiRequest(`/api/rooms/${roomCode}/reset`, { method: 'POST' });
+        mpApiRequest(`/api/rooms/${roomCode}/reset`, { method: 'POST' });
       } else {
         resetChessBoard(true, false);
       }
+    }
+
+    document.getElementById('btn-reset')?.addEventListener('click', (e) => {
+      const win = window;
+      if (typeof win.kaldirisRequestResetConfirmation === 'function') {
+        e.preventDefault();
+        e.stopPropagation();
+        win.kaldirisRequestResetConfirmation();
+        return;
+      }
+      performGameReset();
     });
 
     // =========================================================================
@@ -4505,6 +5101,33 @@ export function initWizardChess() {
       checkmateState.bannerVisible = false;
     });
 
+    function updateSoundToggleUI() {
+      const enabled = isSoundEnabled();
+      const singleBtn = document.getElementById('btn-sound-toggle');
+      if (singleBtn) {
+        singleBtn.textContent = enabled ? '🔊 Som [Ativo]' : '🔇 Som [Mudo]';
+        singleBtn.title = enabled ? 'Desativar efeitos sonoros góticos' : 'Ativar efeitos sonoros góticos';
+        singleBtn.classList.toggle('active', enabled);
+      }
+      document.querySelectorAll('.btn-sound-toggle').forEach((btn) => {
+        btn.textContent = enabled ? '🔊 Som [Ativo]' : '🔇 Som [Mudo]';
+        btn.title = enabled ? 'Desativar efeitos sonoros góticos' : 'Ativar efeitos sonoros góticos';
+        btn.classList.toggle('active', enabled);
+      });
+    }
+
+    document.getElementById('btn-sound-toggle')?.addEventListener('click', () => {
+      toggleSound();
+      updateSoundToggleUI();
+    });
+    document.querySelectorAll('.btn-sound-toggle').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        toggleSound();
+        updateSoundToggleUI();
+      });
+    });
+    updateSoundToggleUI();
+
     // =========================================================================
     // Programmatic API for Automated Verification & Camera Inspection
     // =========================================================================
@@ -4529,8 +5152,36 @@ export function initWizardChess() {
       executeChessMove,
       triggerAIMoveNow,
       resetChessBoard,
-      openLobbyModal,
+      performGameReset,
       toggleUI,
+      setAutoFlipToPlayerTurn,
+      isAutoFlipToPlayerTurn: () => autoFlipToPlayerTurn,
+      orientCameraToCurrentTurnPlayer,
+      getMoveHistoryFormatted,
+      getTop3SimulatedMoves,
+      setSimulationMode,
+      selectSimulatedMove,
+      executeSimulatedMove,
+      isSimulationMode: () => simulationModeActive,
+      toggleSound: () => {
+        const res = toggleSound();
+        updateSoundToggleUI();
+        return res;
+      },
+      isSoundEnabled,
+      setSoundEnabled: (v) => {
+        setSoundEnabled(v);
+        updateSoundToggleUI();
+      },
+      playGameStartBellSound,
+      playMoveSound,
+      playPieceSetDownSound,
+      playAttackApproachSound,
+      playWeaponStrikeSound,
+      playStoneShatterSound,
+      playCheckWarningSound,
+      playKingCrashSound,
+      playCheckmateBannerTrophySound,
       getStats: () => ({
         timeSeconds: gameElapsedSeconds,
         formattedTime: formatTime(gameElapsedSeconds),
@@ -4567,8 +5218,45 @@ export function initWizardChess() {
         scriptedGameActive = false;
         gameMode = 'single';
         playerColor = color === 'b' ? 'b' : 'w';
+        playerWhiteName = playerColor === 'w' ? 'Jogador' : 'IA Kaldiris';
+        playerBlackName = playerColor === 'b' ? 'Jogador' : 'IA Kaldiris';
         resetChessBoard(true);
       },
+      configureSinglePlayer: (playerName = 'Jogador', playerSide = 'w') => {
+        stopMultiplayerSync();
+        scriptedGameActive = false;
+        gameMode = 'single';
+        playerColor = playerSide === 'b' ? 'b' : 'w';
+        playerWhiteName = playerSide === 'w' ? (playerName || 'Jogador') : 'IA Kaldiris';
+        playerBlackName = playerSide === 'b' ? (playerName || 'Jogador') : 'IA Kaldiris';
+        resetChessBoard(true);
+        return { gameMode, playerColor, playerWhiteName, playerBlackName };
+      },
+      configureLocalTwoPlayer: (whiteName = 'Jogador 1', blackName = 'Jogador 2') => {
+        stopMultiplayerSync();
+        scriptedGameActive = false;
+        gameMode = 'local';
+        playerColor = 'w';
+        playerWhiteName = (whiteName || '').trim() || 'Jogador 1';
+        playerBlackName = (blackName || '').trim() || 'Jogador 2';
+        resetChessBoard(true);
+        return { gameMode, playerColor, playerWhiteName, playerBlackName };
+      },
+      configureMultiplayerCreate: async (playerName = 'Jogador 1', hostColor = 'w') => {
+        return await createMultiplayerRoom(hostColor, playerName);
+      },
+      configureMultiplayerJoin: async (code, playerName = 'Jogador 2') => {
+        return await joinMultiplayerRoom(code, playerName);
+      },
+      getGameConfig: () => ({
+        gameMode,
+        playerColor,
+        playerWhiteName,
+        playerBlackName,
+        roomCode,
+        currentTurn,
+        gameOver
+      }),
       setupCustomScenario: (pieces, turn = 'w') => {
         stopMultiplayerSync();
         if (aiTimer) {
